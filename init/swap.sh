@@ -59,6 +59,33 @@ else
 fi
 }
 
+set_swappiness(){
+    current_swappiness=$(cat /proc/sys/vm/swappiness)
+    echo -e "${Green}当前vm.swappiness值为: ${current_swappiness}${Font}"
+    read -p "请输入新的swappiness值(0-100): " swappiness_val
+
+    if [[ ! "$swappiness_val" =~ ^[0-9]+$ ]] || [ "$swappiness_val" -lt 0 ] || [ "$swappiness_val" -gt 100 ]; then
+        echo -e "${Red}输入无效，请输入0-100之间的数字！${Font}"
+        return
+    fi
+
+    if grep -q "^vm.swappiness" /etc/sysctl.conf; then
+        sed -i "s/^vm.swappiness.*/vm.swappiness = ${swappiness_val}/" /etc/sysctl.conf
+    else
+        echo "vm.swappiness = ${swappiness_val}" >> /etc/sysctl.conf
+    fi
+
+    echo -e "${Green}配置已写入 /etc/sysctl.conf${Font}"
+
+    read -p "是否立即生效(执行 sysctl -p)? [y/n]: " apply_now
+    if [[ "$apply_now" == "y" || "$apply_now" == "Y" ]]; then
+        sysctl -p
+        echo -e "${Green}已立即生效，当前值为: $(cat /proc/sys/vm/swappiness)${Font}"
+    else
+        echo -e "${Green}配置将在下次重启后生效。${Font}"
+    fi
+}
+
 #开始菜单
 main(){
 root_need
@@ -68,8 +95,9 @@ echo -e "———————————————————————�
 echo -e "${Green}Linux VPS一键添加/删除swap脚本${Font}"
 echo -e "${Green}1、添加swap${Font}"
 echo -e "${Green}2、删除swap${Font}"
+echo -e "${Green}3、修改swap优先级(vm.swappiness)${Font}"
 echo -e "———————————————————————————————————————"
-read -p "请输入数字 [1-2]:" num
+read -p "请输入数字 [1-3]:" num
 case "$num" in
     1)
     add_swap
@@ -77,9 +105,12 @@ case "$num" in
     2)
     del_swap
     ;;
+    3)
+    set_swappiness
+    ;;
     *)
     clear
-    echo -e "${Green}请输入正确数字 [1-2]${Font}"
+    echo -e "${Green}请输入正确数字 [1-3]${Font}"
     main
     ;;
     esac
