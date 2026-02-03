@@ -69,6 +69,11 @@ set_swappiness(){
         return
     fi
 
+    # 确保配置文件存在
+    if [ ! -f "/etc/sysctl.conf" ]; then
+        touch "/etc/sysctl.conf"
+    fi
+
     if grep -q "^vm.swappiness" /etc/sysctl.conf; then
         sed -i "s/^vm.swappiness.*/vm.swappiness = ${swappiness_val}/" /etc/sysctl.conf
     else
