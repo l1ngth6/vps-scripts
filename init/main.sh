@@ -8,7 +8,7 @@ pause() {
 }
 
 remove_bbr_lotserver() {
-  if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files | rg -q "^lotserver"; then
+  if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files | grep -q "^lotserver"; then
     systemctl stop lotserver >/dev/null 2>&1 || true
     systemctl disable lotserver >/dev/null 2>&1 || true
   fi
@@ -16,10 +16,10 @@ remove_bbr_lotserver() {
 
 bbrfq() {
   remove_bbr_lotserver
-  if ! rg -q "^net.core.default_qdisc=fq$" /etc/sysctl.d/99-sysctl.conf 2>/dev/null; then
+  if ! grep -q "^net.core.default_qdisc=fq$" /etc/sysctl.d/99-sysctl.conf 2>/dev/null; then
     echo "net.core.default_qdisc=fq" >> /etc/sysctl.d/99-sysctl.conf
   fi
-  if ! rg -q "^net.ipv4.tcp_congestion_control=bbr$" /etc/sysctl.d/99-sysctl.conf 2>/dev/null; then
+  if ! grep -q "^net.ipv4.tcp_congestion_control=bbr$" /etc/sysctl.d/99-sysctl.conf 2>/dev/null; then
     echo "net.ipv4.tcp_congestion_control=bbr" >> /etc/sysctl.d/99-sysctl.conf
   fi
   sysctl --system
