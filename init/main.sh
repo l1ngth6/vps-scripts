@@ -15,6 +15,10 @@ remove_bbr_lotserver() {
 }
 
 bbrfq() {
+  local current_qdisc
+  local current_congestion_control
+  local available_congestion_control
+
   remove_bbr_lotserver
   if ! grep -q "^net.core.default_qdisc=fq$" /etc/sysctl.d/99-sysctl.conf 2>/dev/null; then
     echo "net.core.default_qdisc=fq" >> /etc/sysctl.d/99-sysctl.conf
@@ -23,7 +27,29 @@ bbrfq() {
     echo "net.ipv4.tcp_congestion_control=bbr" >> /etc/sysctl.d/99-sysctl.conf
   fi
   sysctl --system
-  echo -e "BBR+FQ修改成功，重启生效！"
+
+  current_qdisc="$(sysctl -n net.core.default_qdisc 2>/dev/null || true)"
+  current_congestion_control="$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || true)"
+  available_congestion_control="$(sysctl -n net.ipv4.tcp_available_congestion_control 2>/dev/null || true)"
+
+  if [[ "$current_qdisc" == "fq" && "$current_congestion_control" == "bbr" ]]; then
+    echo "BBR和FQ默认队列配置已在当前运行内核中加载，无需重启。"
+    echo "后续新建的TCP连接将使用BBR；已有连接和队列规则不会被强制切换。"
+    return
+  fi
+
+  echo "配置已保存，但未能在当前运行内核中完全生效："
+  echo "  net.core.default_qdisc=${current_qdisc:-读取失败}（期望值：fq）"
+  echo "  net.ipv4.tcp_congestion_control=${current_congestion_control:-读取失败}（期望值：bbr）"
+
+  if [[ " $available_congestion_control " != *" bbr "* ]]; then
+    echo "当前运行内核未发现BBR支持。"
+    echo "如果刚升级过内核，请重启进入新内核后重试；否则单纯重启通常无法解决，请确认内核支持tcp_bbr。"
+  else
+    echo "当前内核支持BBR，请检查上方sysctl输出中的错误后重试。一般不需要重启。"
+  fi
+
+  return 1
 }
 
 status_menu() {
