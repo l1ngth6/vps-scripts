@@ -30,21 +30,25 @@ status_menu() {
   bash "$script_dir/serverstatus.sh"
 }
 
-download_and_run_script() {
+download_and_run_script() (
   local script_name="$1"
   local remote_url="$2"
-  local tmp_path="/tmp/${script_name}.$$"
+  local tmp_path
+
+  if ! tmp_path="$(mktemp "/tmp/${script_name}.XXXXXX")"; then
+    echo "无法创建临时文件，已取消。"
+    exit 1
+  fi
+  trap 'rm -f "$tmp_path"' EXIT
 
   echo "将从远程下载并执行: ${remote_url}"
   if wget --no-check-certificate -qO "$tmp_path" "$remote_url"; then
-    chmod +x "$tmp_path"
     bash "$tmp_path"
-    rm -f "$tmp_path"
   else
     echo "下载失败，已取消。"
-    rm -f "$tmp_path"
+    exit 1
   fi
-}
+)
 
 run_local_or_remote() {
   local script_name="$1"

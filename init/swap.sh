@@ -3,6 +3,10 @@ Green="\033[32m"
 Font="\033[0m"
 Red="\033[31m" 
 
+pause(){
+    read -r -p "按回车继续..." _
+}
+
 #root权限
 root_need(){
     if [[ $EUID -ne 0 ]]; then
@@ -93,31 +97,43 @@ set_swappiness(){
 
 #开始菜单
 main(){
-root_need
-ovz_no
-clear
-echo -e "———————————————————————————————————————"
-echo -e "${Green}Linux VPS一键添加/删除swap脚本${Font}"
-echo -e "${Green}1、添加swap${Font}"
-echo -e "${Green}2、删除swap${Font}"
-echo -e "${Green}3、修改swap优先级(vm.swappiness)${Font}"
-echo -e "———————————————————————————————————————"
-read -p "请输入数字 [1-3]:" num
-case "$num" in
-    1)
-    add_swap
-    ;;
-    2)
-    del_swap
-    ;;
-    3)
-    set_swappiness
-    ;;
-    *)
-    clear
-    echo -e "${Green}请输入正确数字 [1-3]${Font}"
-    main
-    ;;
-    esac
+    root_need
+    ovz_no
+
+    while true; do
+        clear
+        echo -e "———————————————————————————————————————"
+        echo -e "${Green}Linux VPS一键添加/删除swap脚本${Font}"
+        echo -e "${Green}1、添加swap${Font}"
+        echo -e "${Green}2、删除swap${Font}"
+        echo -e "${Green}3、修改swap优先级(vm.swappiness)${Font}"
+        echo -e "${Green}0、完成并返回初始化菜单${Font}"
+        echo -e "———————————————————————————————————————"
+        if ! read -r -p "请输入数字 [0-3]:" num; then
+            return
+        fi
+
+        case "$num" in
+        1)
+            add_swap
+            pause
+            ;;
+        2)
+            del_swap
+            pause
+            ;;
+        3)
+            set_swappiness
+            pause
+            ;;
+        0)
+            return
+            ;;
+        *)
+            echo -e "${Green}请输入正确数字 [0-3]${Font}"
+            pause
+            ;;
+        esac
+    done
 }
 main
