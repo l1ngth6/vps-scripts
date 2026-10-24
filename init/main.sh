@@ -18,21 +18,29 @@ bbrfq() {
   local current_qdisc
   local current_congestion_control
   local available_congestion_control
+  local sysctl_file="/etc/sysctl.d/99-vps-scripts-bbr.conf"
+  local applied=true
 
+  if [[ $EUID -ne 0 ]]; then
+    echo "需要 root 权限来修改 BBR 配置。"
+    return 1
+  fi
+  if ! command -v sysctl >/dev/null 2>&1; then
+    echo "缺少 sysctl，请先安装 procps（Debian）或检查 BusyBox（Alpine）。"
+    return 1
+  fi
+
+  mkdir -p /etc/sysctl.d || return 1
+  printf '%s\n' 'net.core.default_qdisc=fq' 'net.ipv4.tcp_congestion_control=bbr' \
+    > "$sysctl_file" || return 1
   remove_bbr_lotserver
-  if ! grep -q "^net.core.default_qdisc=fq$" /etc/sysctl.d/99-sysctl.conf 2>/dev/null; then
-    echo "net.core.default_qdisc=fq" >> /etc/sysctl.d/99-sysctl.conf
-  fi
-  if ! grep -q "^net.ipv4.tcp_congestion_control=bbr$" /etc/sysctl.d/99-sysctl.conf 2>/dev/null; then
-    echo "net.ipv4.tcp_congestion_control=bbr" >> /etc/sysctl.d/99-sysctl.conf
-  fi
-  sysctl --system
+  sysctl -p "$sysctl_file" || applied=false
 
   current_qdisc="$(sysctl -n net.core.default_qdisc 2>/dev/null || true)"
   current_congestion_control="$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || true)"
   available_congestion_control="$(sysctl -n net.ipv4.tcp_available_congestion_control 2>/dev/null || true)"
 
-  if [[ "$current_qdisc" == "fq" && "$current_congestion_control" == "bbr" ]]; then
+  if [[ "$applied" == true && "$current_qdisc" == "fq" && "$current_congestion_control" == "bbr" ]]; then
     echo "BBR和FQ默认队列配置已在当前运行内核中加载，无需重启。"
     echo "后续新建的TCP连接将使用BBR；已有连接和队列规则不会被强制切换。"
     return
@@ -61,6 +69,10 @@ download_and_run_script() (
   local remote_url="$2"
   local tmp_path
 
+  if ! command -v wget >/dev/null 2>&1; then
+    echo "缺少 wget，请先安装 wget 和 ca-certificates。"
+    exit 1
+  fi
   if ! tmp_path="$(mktemp "/tmp/${script_name}.XXXXXX")"; then
     echo "无法创建临时文件，已取消。"
     exit 1
@@ -68,10 +80,10 @@ download_and_run_script() (
   trap 'rm -f "$tmp_path"' EXIT
 
   echo "将从远程下载并执行: ${remote_url}"
-  if wget --no-check-certificate -qO "$tmp_path" "$remote_url"; then
+  if wget -T 30 -t 2 -qO "$tmp_path" "$remote_url" && [[ -s "$tmp_path" ]] && bash -n "$tmp_path"; then
     bash "$tmp_path"
   else
-    echo "下载失败，已取消。"
+    echo "下载失败或脚本无效，已取消；请检查网络及 ca-certificates。"
     exit 1
   fi
 )
@@ -81,7 +93,8 @@ run_local_or_remote() {
   local local_path="$2"
   local remote_url="$3"
 
-  read -r -p "是否从远程拉取最新脚本后执行？[y/N]: " pull_remote
+  local pull_remote
+  read -r -p "是否从远程拉取最新脚本后执行？[y/N]: " pull_remote || return 0
   if [[ "$pull_remote" =~ ^[Yy]$ ]]; then
     download_and_run_script "$script_name" "$remote_url"
   else
@@ -98,6 +111,11 @@ run_swap() {
 }
 
 main_menu() {
+  if [[ -f /etc/alpine-release && $EUID -ne 0 ]]; then
+    echo "Alpine 请使用 root 执行此脚本。"
+    return 1
+  fi
+  local choice
   while true; do
     clear
     cat <<'EOF'
@@ -108,29 +126,32 @@ main_menu() {
 4) 运行 swap.sh
 0) 退出
 EOF
-    read -r -p "请选择: " choice
+    read -r -p "请选择: " choice || return 0
     case "$choice" in
       1)
         bbrfq
-        pause
+        pause || return 0
         ;;
       2)
         status_menu
+        if [[ -f /etc/alpine-release ]]; then
+          pause || return 0
+        fi
         ;;
       3)
         run_use_sshkey
-        pause
+        pause || return 0
         ;;
       4)
         run_swap
-        pause
+        pause || return 0
         ;;
       0)
         exit 0
         ;;
       *)
         echo "无效选择"
-        pause
+        pause || return 0
         ;;
     esac
   done
